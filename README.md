@@ -12,6 +12,9 @@ DarkArren Infra repository
 
 </details>
 
+<details>
+  <summary>HomeWork 05 - Знакомство с облачной инфраструктурой. Google Cloud Platform </summary>
+
 ## HomeWork 05 - Знакомство с облачной инфраструктурой. Google Cloud Platform
 
 - Создана учетная запись в GCP, активирован trial
@@ -109,3 +112,176 @@ EOF
 
 bastion_IP = 34.77.105.249
 someinternalhost_IP = 10.132.0.4
+
+</details>
+
+## HomeWork 06 - Деплой тестового приложения
+
+- Установил google-cloud-sdk `brew cask install google-cloud-sdk`
+- Инициализировал glcoud через `glcoud init`
+- Создал vm **reddit-app** через gcloud
+
+<details>
+  <summary>Create reddit-app vm</summary>
+
+```bash
+gcloud compute instances create reddit-app\
+  --boot-disk-size=10GB \
+  --image-family ubuntu-1604-lts \
+  --image-project=ubuntu-os-cloud \
+  --machine-type=g1-small \
+  --tags puma-server \
+  --restart-on-failure
+```
+
+</details>
+
+- Подключился по SSH `ssh appuser@34.77.105.249`
+- Установил Ruby и Bundler `sudo apt update && sudo apt install -y ruby-full ruby-bundler build-essential`
+- Добавил ключи и репозиторий MongoDB `sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv EA312927 &&
+sudo bash -c 'echo "deb http://repo.mongodb.org/apt/ubuntu xenial/mongodb-org/3.2 multiverse" > /etc/apt/sources.list.d/mongodb-org-3.2.list'`
+- Установил MongoDB `sudo apt update && sudo apt install -y mongodb-org`
+- Запустил MongoDB и добавил автостарт `sudo systemctl start mongod && sudo systemctl enable mongod`
+- Выкачал код приложения `git clone -b monolith https://github.com/express42/reddit.git`
+- Установил зависимости `cd reddit && bundle install`
+- Запустил сервер puma, проверил что он запустился `puma -d && ps aux | grep puma`
+- Создал правило для puma-server (tcp 9292)
+- Убедился что приложение доступно по <http://34.77.105.249>
+
+### Самостоятельная работа
+
+- Создан скрипт install_ruby.sh устанавливающий ruby
+
+<details>
+  <summary>install_ruby.sh</summary>
+
+```bash
+#!/bin/bash
+apt update
+apt install -y ruby-full ruby-bundler build-essential
+
+```
+
+</details>
+
+- Создан скрипт install_mongodb.sh устанавливающий mongodb
+
+<details>
+  <summary>install_mongodb.sh</summary>
+
+```bash
+#!/bin/bash
+sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv EA312927
+sudo bash -c 'echo "deb http://repo.mongodb.org/apt/ubuntu xenial/mongodb-org/3.2 multiverse" > /etc/apt/sources.list.d/mongodb-org-3.2.list'
+sudo apt update
+sudo apt install -y mongodb-org
+sudo systemctl start mongod
+sudo systemctl enable mongod
+
+```
+
+</details>
+
+- Создан скрипт deploy.sh - загружающий код приложения, устанавливающий зависимости и запускающий приложение
+
+<details>
+  <summary>deploy.sh</summary>
+
+```bash
+#!/bin/bash
+git clone -b monolith https://github.com/express42/reddit.git
+cd reddit && bundle install
+puma -d
+
+```
+
+</details>
+
+### Дополнительное задание
+
+- Создан startup_script.sh для настройки сервера, установки и запуска приложения
+
+<details>
+  <summary>startup_script.sh</summary>
+
+```bash
+#!/bin/bash
+echo "Install Ruby"
+apt update
+apt install -y ruby-full ruby-bundler build-essential
+echo "Install MongoDB"
+sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv EA312927
+sudo bash -c 'echo "deb http://repo.mongodb.org/apt/ubuntu xenial/mongodb-org/3.2 multiverse" > /etc/apt/sources.list.d/mongodb-org-3.2.list'
+sudo apt update
+sudo apt install -y mongodb-org
+sudo systemctl start mongod
+sudo systemctl enable mongod
+echo "Deploy reddit monolith"
+git clone -b monolith https://github.com/express42/reddit.git
+cd reddit && bundle install
+puma -d
+
+```
+
+</details>
+
+- Создание vm с использованием startup-script из файла
+
+<details>
+  <summary>startup-script from file</summary>
+
+```bash
+gcloud compute instances create app\
+    --boot-disk-size=10GB \
+    --image-family ubuntu-1604-lts \
+    --image-project=ubuntu-os-cloud \
+    --machine-type=g1-small \
+    --zone=europe-west3-c \
+    --tags puma-server \
+    --restart-on-failure \
+    --metadata-from-file startup-script=./startup_script.sh
+```
+
+</details>
+
+- Создание инстанса с использование startup-script-url
+
+<details>
+  <summary>startup-script-url</summary>
+
+```bash
+gcloud compute instances create reddit-app\
+    --boot-disk-size=10GB \
+    --image-family ubuntu-1604-lts \
+    --image-project=ubuntu-os-cloud \
+    --machine-type=g1-small \
+    --zone=europe-west3-c \
+    --tags puma-server \
+    --restart-on-failure \
+    --metadata startup-script-url=https://uc0e5b58fe26d67541cbba141dbe.dl.dropboxusercontent.com/cd/0/inline/AiVa7NjvKFygSrCLh01ciNQmDB7mmrGT8pEInNhDLgNYeOQWZIJLZGgjkIJq4LmuRkVr-DWQttXySZMMCOO2iILKXUIjRTeRwPTqULgVcLP9hA/file#
+```
+
+</details>
+
+- Создание firewall rule **default-puma-server** через gcloud
+
+<details>
+  <summary>create default-puma-server firewall rule</summary>
+
+```bash
+gcloud compute firewall-rules create default-puma-server\
+    --network default \
+    --priority 1000 \
+    --direction ingress \
+    --action allow \
+    --target-tags puma-server \
+    --source-ranges 0.0.0.0/0 \
+    --rules TCP:9292
+```
+
+</details>
+
+### IP-адрес и порт
+
+testapp_IP = 34.77.105.249
+testapp_port = 9292
