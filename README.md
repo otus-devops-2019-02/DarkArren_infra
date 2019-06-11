@@ -115,6 +115,9 @@ someinternalhost_IP = 10.132.0.4
 
 </details>
 
+<details>
+  <summary>HomeWork 06 - Деплой тестового приложения</summary>
+
 ## HomeWork 06 - Деплой тестового приложения
 
 - Установил google-cloud-sdk `brew cask install google-cloud-sdk`
@@ -231,7 +234,7 @@ puma -d
   <summary>startup-script from file</summary>
 
 ```bash
-gcloud compute instances create app\
+gcloud compute instances create reddit-app\
     --boot-disk-size=10GB \
     --image-family ubuntu-1604-lts \
     --image-project=ubuntu-os-cloud \
@@ -285,3 +288,38 @@ gcloud compute firewall-rules create default-puma-server\
 
 testapp_IP = 34.77.105.249
 testapp_port = 9292
+
+</details>
+
+## HomeWork 07 - Сборка образов VM при помощи Packer
+
+- Установлен packer (1.4.1)
+- Добавлен Application Default Credentials `gcloud auth application-default login`
+- Создан шаблон для baked-image **ubuntu16.json**
+- В шаблоне определены Packer builders
+- В шаблон добавлены shell provisioners для установки Ruby и MongoDB
+- Добавлены bash-скрипты для использования в shell provisioners
+- Выполнена валидация щаблона: `packer validate ./ubuntu16.json`
+- Выполнена сборка шаблона `packer build ubuntu16.json`
+- Образ успешно создался и доступен в консоли GCP - Compute Engine - Images
+- Приложение успешно установилось и запустилось на машине, созданной и подготовленного образа
+
+### Самостоятельное задание
+
+- В шаблон добавлен раздел variables, описывающий пользовательские переменные: project_id, source_image_family, machine_type
+- Добавлен файл variables.json, содержащий определение пользовательских переменных
+- Дополнительно параметризированы следующие значения: описание образа, размер и тип диска, название сети, теги
+- Файл variables.json внесен в .gitignore, создан файл-заглушка variables.json.example
+- Темплейт провалидирован и собран образ: `packer validate -var-file=variables.json ubuntu16.json && packer build -var-file=variables.json ubuntu16.json`
+
+### Задание со звездочкой 1
+
+- Добавлен шаблон immutable.json, созданный на основе шаблона ubuntu16.json
+- Добавлен shell provisioner запускающий скрипт deploy.sh, который загружает и устанавливает приложение
+- Добавлен file provisioner, который копирует на машину unit-файл **reddit.service**
+- Добавлен shell provisioner, который копирует unit-файл в /etc/systemd/system и делает enable для сервиса
+- Темплейт провалидирован и собран образ `packer validate -var-file=variables.json immutable.json && packer build -var-file=variables.json immutable.json`
+
+### Задание со звездочкой 2
+
+- Создан скрипт **create_reddit_vm.sh**, который, используя gcloud, создает виртуальную машину на основе образа reddit-full
