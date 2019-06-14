@@ -291,6 +291,9 @@ testapp_port = 9292
 
 </details>
 
+<details>
+  <summary>HomeWork 07 - Сборка образов VM при помощи Packer</summary>
+
 ## HomeWork 07 - Сборка образов VM при помощи Packer
 
 - Установлен packer (1.4.1)
@@ -323,3 +326,150 @@ testapp_port = 9292
 ### Задание со звездочкой 2
 
 - Создан скрипт **create_reddit_vm.sh**, который, используя gcloud, создает виртуальную машину на основе образа reddit-full
+
+</details>
+
+## HomeWork 08 - Практика IaC с использованием Terraform
+
+- Удален SSH-ключ пользователя appuser из Compute Engine - Metadata - SSH keys
+- Установлен Terraform v0.11.11
+- Создан конфигурационный файл **terraform/main.tf**
+- Добавлены terraform-related исключения в .gitignore
+- В **main.tf** добавлено описание провайдера GCP
+- Выполнена инициализация модулей Terraform `cd terraform && terraform init`
+- В **main.tf** добавлен ресурс **google_compute_instance** для создания vm в GCP
+- Проведена валидация планируемых изменений `terraform plan`
+- Применены запланированные изменения `terraform apply`
+- Получен IP-адрес инстанса из tfstate-файла `terraform show | grep nat_ip`
+- Произведена попытка подключения к инстансу по SSH `ssh appuser@34.77.176.212`, подключение не удалось
+- В **main.tf** в описание ресурса добавлен раздел metadata, содержащий путь к публичному ключу
+
+<details>
+  <summary>ssh metadata</summary>
+
+```bash
+metadata {
+  # путь до публичного ключа
+  ssh-keys = "appuser:${file("~/.ssh/appuser.pub")}"
+}
+```
+
+</details>
+
+- Изменения проверены и применены к инстансу `terraform plan && terraform apply -auto-approve`
+- Проверено подключение к инстансу по SSH, подключение прошло успешно
+- Добавлен файл выходных переменных **outputs.tf**
+- Добавлена выходная переменна app_external_ip `google_compute_instance.app.network_interface.0.access_config.0.nat_ip`
+- Получено значение переменной после выполнения `terraform refresh` и `terraform output`
+- Добавлено описание ресурса google_compute_firewall, создающее правило, которое разрешает доступ на 9292 порт
+- Изменения применены, создано правило для firewall в GCP
+- Добавлен тэг `tags = ["reddit-app"]` для инстанса **google_compute_instance.app**
+
+### Provisioners
+
+- Для ресурса **google_compute_instance.app** добавлен provisioner типа file, который будет копировать файл с локальной машины на создаваемый инстанс
+
+<details>
+  <summary>file provisioner</summary>
+
+```ruby
+provisioner "file" {
+    source = "files/puma.service"
+    destination = "/tmp/puma.service"
+}
+```
+
+</details>
+
+- Для ресурса **google_compute_instance.app** добавлен provisioner типа remote_exec, который будет запускать bash-скрипт на создаваемом инстансе
+
+<details>
+  <summary>remote_exec provisioner</summary>
+
+```ruby
+provisioner "remote-exec" {
+    script = "files/deploy.sh"
+}
+```
+
+</details>
+
+- Внутрь описания ресурса **google_compute_instance.app** добавлен раздел connection, который определеяет параметры подключения к инстансу для запуска провижионеров
+
+<details>
+  <summary>provisioner connection</summary>
+
+```ruby
+connection {
+  type = "ssh"
+  user = "appuser"
+  agent = false
+  # путь до приватного ключа
+  private_key = "${file("~/.ssh/appuser")}"
+}
+```
+
+</details>
+
+- Т.к. провижионеры запускаются только при создании нового ресурса (или при удалении), то, для выполнения секций провижионинга, ресурс **google_compute_instance.app** помечен для перес оздания при слудеющем применении изменений `terraform taint google_compute_instance.app`
+- После применения изменений можно убедитсья, что приложение reddit доступно по <http://your-vm-ip:9292>
+
+### Input Vars
+
+- Добавлен файл под input vars - **variables.tf**
+- В файл переменных terraform добавлены переменные: project, region, public_key_path, disk_image
+- В файле **main.tf** значения параметров project, region, public_key_path. disk_image изменены на переменные
+- Значения переменных, которые не имеют дефолтного значения, определены в файле **terraform.tfvars**
+- Инфраструктура пересоздана посредством выполнения команд `terraform destroy -auto-approve && terraform plan && terraform apply -auto-approve`
+- После пересоздания приложения доступно по  <http://your-vm-ip:9292>
+
+### Самостоятельное задание
+
+- Определена переменная private_key_path которая используется для подключения провижионеров в ресурсе **google_compute_instance.app**
+- Определена переменная zone, которая имеет дефолтное значение и используется в ресурсе **google_compute_instance.app**
+- Все файл отформатированы `terraform fmt .`
+- Добавлен шаблон переменных **terraform.tfvars.example**
+
+### Задание со звездочкой (*)
+
+- Добавление ключа пользователя в Compute Engine - Metadata
+
+<details>
+  <summary>add ssh key for 1 user</summary>
+
+```ruby
+resource "google_compute_project_metadata" "default" {
+  metadata {
+    ssh-keys = "abramov1:${file(var.public_key_path)}"
+  }
+}
+```
+
+</details>
+
+- Добавление ключей нескольких пользователей в Compute Engine - Metadata
+
+<details>
+  <summary>Add ssh key for 5 users</summary>
+
+```bash
+resource "google_compute_project_metadata" "default" {
+  metadata {
+    ssh-keys = "appuser1:${file(var.public_key_path)} appuser2:${file(var.public_key_path)} appuser3:${file(var.public_key_path)} appuser4:${file(var.public_key_path)} appuser5:${file(var.public_key_path)}"
+  }
+}
+```
+
+</details>
+
+- В метаданные проекта добавлен ssh-ключ для пользователя appuser_web
+- После применения `terraform apply` была обнаружена проблема: ключ пользователя appuser_web был удален из метаданных проекта, остались только те ключи, которые описаны в terraform
+
+### Задание с двумя звездочками (**)
+
+- Добавлен файл **lb.tf** описывающий создание балансировщика для http
+- В outputs добавлен вывод ip адреса балансировщика
+- Добавлено создание еще одного инстанса, неудобство - копирование кода ведет к разрастанию файла и возможным ошибкам и неодинаковости инстансов
+- Добавлено создание второго инстанса с приложением через count
+- Добавлено автоматическое добавление инстансов в target_pool
+- Добавлен вывод в outputs ip-адресов созданных инстансов
