@@ -479,6 +479,9 @@ resource "google_compute_project_metadata" "default" {
 
 </details>
 
+<details>
+  <summary>HomeWork 09 - Принципы организации инфраструктурного кода и работа над инфраструктурой в команде на примере Terraform</summary>
+
 ## HomeWork 09 - Принципы организации инфраструктурного кода и работа над инфраструктурой в команде на примере Terraform
 
 - В **main.tf** добавлен ресурс **google_compute_firewall.firewall_ssh** для создания правила доступа по 22 порту
@@ -618,3 +621,171 @@ inline = [
 </details>
 
 - В результате работы провижионера изменяется конфигурационный файл mongod.config, что позволяет подключаться к базе отовсюду.
+
+</details>
+
+## HomeWork 10 - Управление конфигурацией. Основные DevOps инструменты. Знакомство с Ansible
+
+- Установлен Ansible
+
+<details>
+  <summary>ansible --version</summary>
+
+```bash
+ansible 2.8.0
+  config file = None
+  configured module search path = ['/Users/4rren/.ansible/plugins/modules', '/usr/share/ansible/plugins/modules']
+  ansible python module location = /usr/local/lib/python3.7/site-packages/ansible
+  executable location = /usr/local/bin/ansible
+  python version = 3.7.3 (default, Mar 27 2019, 09:23:15) [Clang 10.0.1 (clang-1001.0.46.3)]
+```
+
+</details>
+
+- Посредством Terraform развернута инфраструктура stage
+- Создана inventory **ansible/inventory** с описанием машины appserver
+- Проверена возможность подключения ansible к хосту appserver
+
+<details>
+  <summary> ansible appserver -m ping -i inventory</summary>
+
+```bash
+[DEPRECATION WARNING]: Distribution Ubuntu 16.04 on host appserver should use /usr/bin/python3, but is using /usr/bin/python for backward compatibility with prior Ansible releases. A future Ansible
+release will default to using the discovered platform python for this host. See https://docs.ansible.com/ansible/2.8/reference_appendices/interpreter_discovery.html for more information. This feature
+will be removed in version 2.12. Deprecation warnings can be disabled by setting deprecation_warnings=False in ansible.cfg.
+appserver | SUCCESS => {
+    "ansible_facts": {
+        "discovered_interpreter_python": "/usr/bin/python"
+    },
+    "changed": false,
+    "ping": "pong"
+}
+```
+
+</details>
+
+- В ansible/inventory добавлен хост dbserver, проверена возможность подключения Ansible к хосту dbserver `ansible dbserver -m ping -i inventory`
+- Настроен ansible.cfg
+- Получены данные об uptime сервера БД `ansible dbserver -m command -a uptime`
+- В инвентори добавлены группы хостов app и db
+- Добавлена yaml-инвентори, проверена доступность хостов в группах
+- Исследована работа модулей shell и command
+- Исследована работа модулей systemd и service
+- Исследована работа модуля git в сравнении с модулем command
+- Добавлен плейбук clone.yml
+- Результат первого запуска
+
+<details>
+  <summary>ansible-playbook clone.yml</summary>
+
+```bash
+PLAY [Clone] **************************************************************************************************************************
+
+TASK [Gathering Facts] ****************************************************************************************************************
+ok: [appserver]
+
+TASK [Clone repo] *********************************************************************************************************************
+ok: [appserver]
+
+PLAY RECAP ****************************************************************************************************************************
+appserver                  : ok=2    changed=0    unreachable=0    failed=0
+```
+
+</details>
+
+- Второй запуск - после выполнения `ansible app -m command -a 'rm -rf ~/reddit'`
+
+<details>
+  <summary>ansible-playbook clone.yml</summary>
+
+```bash
+PLAY [Clone] **************************************************************************************************************************
+
+TASK [Gathering Facts] ****************************************************************************************************************
+ok: [appserver]
+
+TASK [Clone repo] *********************************************************************************************************************
+changed: [appserver]
+
+PLAY RECAP ****************************************************************************************************************************
+appserver                  : ok=2    changed=1    unreachable=0    failed=0
+```
+
+</details>
+
+- После удаления директории reddit и повторного запуска плейбка clone.yml изменился статус после сообщения. В первом случае папка уже была, поэтому выполнение плейбука, по сути, не вносило никаких изменений. Во втором случае - репозиторий был загружен, соответственно второй таск внес изменения, что и отобразилось в логе.
+
+### HW10: Задание со *
+
+- Добавлен файл в формате динамического инвентори - inventory.json
+
+<details>
+  <summary>inventory.json</summary>
+
+```json
+{
+    "app": {
+        "hosts": ["appserver"]
+    },
+    "db": {
+        "hosts": ["dbserver"]
+    },
+    "_meta": {
+        "hostvars": {
+            "appserver": {
+                "ansible_host" : "34.77.213.46"
+            },
+            "dbserver": {
+                "ansible_host": "35.240.15.8"
+            }
+        }
+    }
+}
+```
+
+</details>
+
+- Добавлен "скрипт для формирования динамического инвентори, лол"
+
+<details>
+  <summary>dynamic_inventory.json</summary>
+
+```bash
+#!/bin/bash
+cat ./inventory.json
+```
+
+</details>
+
+- dynamin_inventory.json помечен как исполняемый
+- Проверена работоспособность c использованием скрипта динамического инвентор
+
+<details>
+  <summary>ansible all -m ping -i dynamic_inventory.json</summary>
+
+```bash
+ansible all -m ping -i dynamic_inventory.sh
+[DEPRECATION WARNING]: Distribution Ubuntu 16.04 on host dbserver should use /usr/bin/python3, but is using /usr/bin/python for backward compatibility with prior Ansible releases. A future Ansible
+release will default to using the discovered platform python for this host. See https://docs.ansible.com/ansible/2.8/reference_appendices/interpreter_discovery.html for more information. This feature
+will be removed in version 2.12. Deprecation warnings can be disabled by setting deprecation_warnings=False in ansible.cfg.
+dbserver | SUCCESS => {
+    "ansible_facts": {
+        "discovered_interpreter_python": "/usr/bin/python"
+    },
+    "changed": false,
+    "ping": "pong"
+}
+[DEPRECATION WARNING]: Distribution Ubuntu 16.04 on host appserver should use /usr/bin/python3, but is using /usr/bin/python for backward compatibility with prior Ansible releases. A future Ansible
+release will default to using the discovered platform python for this host. See https://docs.ansible.com/ansible/2.8/reference_appendices/interpreter_discovery.html for more information. This feature
+will be removed in version 2.12. Deprecation warnings can be disabled by setting deprecation_warnings=False in ansible.cfg.
+appserver | SUCCESS => {
+    "ansible_facts": {
+        "discovered_interpreter_python": "/usr/bin/python"
+    },
+    "changed": false,
+    "ping": "pong"
+}
+```
+
+</details>
+
