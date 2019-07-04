@@ -6,7 +6,7 @@ resource "google_compute_target_pool" "reddit" {
   #   "europe-west1-b/reddit-app-1",
   # ]
   instances = [
-    "${google_compute_instance.app.*.self_link}"
+    "${google_compute_instance.app.*.self_link}",
   ]
 
   health_checks = [
@@ -20,8 +20,6 @@ resource "google_compute_forwarding_rule" "http" {
   target     = "${google_compute_target_pool.reddit.self_link}"
   port_range = "9292"
 }
-
-
 
 resource "google_compute_http_health_check" "http" {
   name               = "reddit-http-check"

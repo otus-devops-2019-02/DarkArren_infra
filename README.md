@@ -329,6 +329,9 @@ testapp_port = 9292
 
 </details>
 
+<details>
+  <summary>HomeWork 08 - Практика IaC с использованием Terraform</summary>
+
 ## HomeWork 08 - Практика IaC с использованием Terraform
 
 - Удален SSH-ключ пользователя appuser из Compute Engine - Metadata - SSH keys
@@ -473,3 +476,145 @@ resource "google_compute_project_metadata" "default" {
 - Добавлено создание второго инстанса с приложением через count
 - Добавлено автоматическое добавление инстансов в target_pool
 - Добавлен вывод в outputs ip-адресов созданных инстансов
+
+</details>
+
+## HomeWork 09 - Принципы организации инфраструктурного кода и работа над инфраструктурой в команде на примере Terraform
+
+- В **main.tf** добавлен ресурс **google_compute_firewall.firewall_ssh** для создания правила доступа по 22 порту
+- При попытке выполнения `terraform apply` возникла ошибка, так как правило с такими параметрами уже существет в GCP
+- Информации о существующем правиле **default-allow-ssh** добавлена в state терраформа `terraform import google_compute_firewall.firewall_ssh default-allow-ssh`
+- В **main.tf** добавлен ресурс **google_compute_address.app_ip**
+- Для создаваемого инстанса приложения определен ip_address в виде ссылки на созданный ресурс `nat_ip = "${google_compute_address.app_ip.address}"`
+
+### Структуризация ресурсов
+
+- При помощи Packer подготовлены образы **reddit-app-base** и **reddit-db-base**
+- Созданы новые файлы **app.tf** с описанием ресурсов для инстанса с приложением и **db.tf** с описанием ресурсов для инстанса с MongoDB
+- Создан **vpc.tf** с описанием ресурсов, применимых для всех инстансов
+- Изменения спланированы и успешно применены
+
+### Модули
+
+- На основе **app.tf**, **db.tf** созданы соответствующие модули Terraform
+- Удалены **app.tf** и **db.tf** из директории terraform
+- В **main.tf** добавлены секции вызова модулей app и db
+- Выполнена загрузка модулей в кэш Terraform (.terraform) `terraform get`
+- Обнаружена проблема вывода outputs при запуске `terraform plan`
+- В **outputs.tf** изменен вывод app_external_ip на переменную, получаемую из модуля app `value = "${module.app.app_external_ip}"`
+- По аналогии с модулями app и db добавлен модуль vpc
+- Инфраструктура развернута и проверено подключение по ssh к хостам reddit-app и reddit-db
+
+### Параметризация модулей
+
+- В модуле vpc параметризирован параметр source_ranges для ресурса google_compute_firewall
+- Проверена функциональность фильтра по адресу, если в source_ranges указан не мой IP - доступ по ssh к хостам отсутствует, если указан мой адрес или 0.0.0.0/0 - доступ по ssh есть
+
+### Переиспользование модулей
+
+- Созданы директории для окружения stage и prod
+- В main.tf в директориях для окружений изменены пути для локальной директории с модулями
+- Для Stage параметр source range задан как 0.0.0.0/0, для prod - мой-внешний-адрес/32
+- Проверена работа терраформ для разных окружений
+- Удалены файл main.tf, outputs.tf, terraform.tfvars, variables.tf из директории terraform
+- Для модулей app и db параметризированы значения machine_type и ssh_user
+
+### Реестр модулей
+
+- В директорию terraform добавлен файл **storage-bucket.tf**
+- Проверено создание storage посредством запуска terraform
+
+### HW09: Задание со звездочкой (*)
+
+- Настроено хранение terraform state в google cloud storage:
+
+<details>
+  <summary>backend.tf</summary>
+
+```go
+terraform {
+  backend "gcs" {
+    bucket  = "storage-bucket-production"
+    prefix  = "prod"
+  }
+}
+
+```
+
+</details>
+
+- Проверена возможность запуска terraform apply из директории без terraform.tfstate
+
+- При запуске одновременно из двух разных директорий срабатывает блокировка исполнения:
+
+<details>
+  <summary>state lock</summary>
+
+```bash
+Acquiring state lock. This may take a few moments...
+
+Error: Error locking state: Error acquiring the state lock: writing "gs://storage-bucket-production/prod/default.tflock" failed: googleapi: Error 412: Precondition Failed, conditionNotMet
+Lock Info:
+  ID:        1548271474324722
+  Path:      gs://storage-bucket-production/prod/default.tflock
+  Operation: OperationTypeApply
+  Who:       user@machine.local
+  Version:   0.11.9
+  Created:   2019-01-23 19:24:34.23497 +0000 UTC
+  Info:
+
+
+Terraform acquires a state lock to protect the state from being written
+by multiple users at the same time. Please resolve the issue above and try
+again. For most commands, you can disable locking with the "-lock=false"
+flag, but this is not recommended.
+```
+
+</details>
+
+### HW09: Задание с двумя звездочками (**)
+
+- В модуль app добавлены provisioners:
+
+<details>
+  <summary>app module provisioner</summary>
+
+```go
+provisioner "file" {
+  source      = "${path.module}/files/puma.service"
+  destination = "/tmp/puma.service"
+}
+
+provisioner "remote-exec" {
+  script = "${path.module}/files/deploy.sh"
+}
+provisioner "remote-exec" {
+  inline = [
+    "echo 'export DATABASE_URL=${var.db_internal_address}' >> ~/.profile",
+    "export DATABASE_URL=${var.db_internal_address}",
+    "sudo systemctl restart puma.service"
+    ]
+}
+```
+
+</details>
+
+- Модуль app получает значение переменной db_internal_address из outputs модуля db, а затем, в процессе работы провижионера, добавляет это значение в переменные окружения, что позволяет приложениею reddit обратиться к базе данных MongoDB по правильному адресу
+
+-В модуль db добавлен provisioner:
+
+<details>
+  <summary>db module provisioner</summary>
+
+```go
+provisioner "remote-exec" {
+inline = [
+  "sudo sed -i 's/127.0.0.1/0.0.0.0/g' /etc/mongod.conf",
+  "sudo systemctl restart mongod.service",
+  ]
+}
+```
+
+</details>
+
+- В результате работы провижионера изменяется конфигурационный файл mongod.config, что позволяет подключаться к базе отовсюду.
