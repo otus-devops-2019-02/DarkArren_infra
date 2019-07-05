@@ -33,21 +33,21 @@ resource "google_compute_instance" "app" {
   #   source      = "${path.module}/files/puma.service"
   #   destination = "/tmp/puma.service"
   # }
-  provisioner "remote-exec" {
-    inline = ["echo '[Unit]\nDescription=Puma HTTP Server\nAfter=network.target\n\n[Service]\nType=simple\nUser=${var.ssh_user}\nWorkingDirectory=/home/${var.ssh_user}/reddit\nExecStart=/bin/bash -lc 'puma'\nRestart=always\n\n[Install]\nWantedBy=multi-user.target' >> /tmp/puma.service"]
-  }
+  # provisioner "remote-exec" {
+  #   inline = ["echo '[Unit]\nDescription=Puma HTTP Server\nAfter=network.target\n\n[Service]\nType=simple\nUser=${var.ssh_user}\nWorkingDirectory=/home/${var.ssh_user}/reddit\nExecStart=/bin/bash -lc 'puma'\nRestart=always\n\n[Install]\nWantedBy=multi-user.target' >> /tmp/puma.service"]
+  # }
 
-  provisioner "remote-exec" {
-    script = "${path.module}/files/deploy.sh"
-  }
+  # provisioner "remote-exec" {
+  #   script = "${path.module}/files/deploy.sh"
+  # }
 
-  provisioner "remote-exec" {
-    inline = [
-      "echo 'export DATABASE_URL=${var.db_internal_address}' >> ~/.profile",
-      "export DATABASE_URL=${var.db_internal_address}",
-      "sudo systemctl restart puma.service",
-    ]
-  }
+  # provisioner "remote-exec" {
+  #   inline = [
+  #     "echo 'export DATABASE_URL=${var.db_internal_address}' >> ~/.profile",
+  #     "export DATABASE_URL=${var.db_internal_address}",
+  #     "sudo systemctl restart puma.service",
+  #   ]
+  # }
 }
 
 resource "google_compute_address" "app_ip" {
