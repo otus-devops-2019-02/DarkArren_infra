@@ -1,6 +1,7 @@
 # DarkArren_infra
 DarkArren Infra repository
 
+[![Build Status](https://travis-ci.com/otus-devops-2019-02/DarkArren_infra.svg?branch=master)](https://travis-ci.com/Otus-DevOps-2019-02/DarkArren_infra)
 <details>
   <summary>HomeWork 04 - Локальное окружение инженера. ChatOps и визуализация рабочих процессов. Командная работа с Git. Работа в GitHub</summary>
 
@@ -794,6 +795,9 @@ appserver | SUCCESS => {
 
 </details>
 
+<details>
+  <summary>HomeWork 11 - Деплой и управлений конфигурацией с Ansible</summary>
+
 ## HomeWork 11 - Деплой и управлений конфигурацией с Ansible
 
 - Закомментирован код провижининга для модулей Terraform
@@ -854,3 +858,61 @@ appserver | SUCCESS => {
 - В шаблонах packer provisioner shell заменен на provisioner ansible
 - Образы пересобраны с использованием измененных шаблонов packer
 - Инфраструктура пересоздана и развернуто приложение с использование плейбука site.yml
+
+</details>
+
+## HomeWork 12 - Ansible: работа с ролями и окружениями
+
+- Созданы заготовки ролей app и db `ansible-galaxy init app`
+- В ansible/roles/db/tasks/main.yml перенесены таски из плейбука ansible/db.yml
+- В ansible/roles/db/hadnlers/main.yml перенесены используемые хэндлеры из ansible/db.yml
+- В ansible/roles/db/templates скопирован шаблон конфига MongoDB
+- В ansible/roles/db/defaults/main.yml определеные переменные, которые используются в конфиге
+- Аналогично db в роль app перенесены таски, хэндлеры, темплеты и определены переменные
+- Плейбуки ansible/app.yml и ansible/db.yml переделаны на использование ролей, вместо тасков
+- Переразвернул инфраструктуру в terraform
+- Выполнил ansible-playbook site.yml
+
+### Окружения
+
+- Созданы директории для окружений stage и prod
+- Inventory из директории ansible скопирован в директории окружений
+- В ansible.cfg в качестве inventory по умолчанию установлен `./environments/stage/inventory`
+- В директории окружений добавлены директории group_vars
+- Из плейбуков перенесены переменные в соответствующие файлы group_vars для окружений stage и prod
+- Для ролей app и db добавлена переменная `env: local` в defaults/main.yml
+- В роли добалвен таск, выводящий информацию об используемом окружении
+- В ansible.cfg добавлено указание пути до директории с ролями и обязатыльный вывод диффа при изменениях
+- Проверена корректность запуска site.yml для окружений stage и prod
+
+### Работа с community-ролями
+
+- Созданый requirements-файлы для окружений
+- Установлена роль jdauphant.nginx `nsible-galaxy install -r environments/stage/requirements.yml`
+- В group_vars для app-хостов добавлены минимальные настройки проксирования для роли nginx
+- В Terraform-модуль app добавлено создание правила для доступа на 80 порт
+- В плейбук app.yml добавлен вызов роли jdauphant.nginx
+- Применено плейбук site.yml, убедился что приложение доступно по порту 80
+
+### Работа с Ansible Vault
+
+- Создан файл vault.key с паролем для Ansible Vault
+- В ansible.cfg добавлен параметр vault_password_file
+- Добавлен плейбук для создания пользователей - users.yml
+- Добавлены credentials.yml для окружений
+- Файлы credentials.yml зашифрованы
+- Вызов плейбука users.yml добавлен в site.yml и применен для stage-окружения
+
+## HW12: Задание со * - Работа с динамическим инветори
+
+- Добавил gce.py в директорию для каждого окружения
+- Добавить в group_vars файлы tag_reddit-app и tag_reddit-db со значениями переменных для ролей.
+- Запустил ansible-playbook -i environments/stage/gce.py playbooks/site.yml на чистой инфраструктуре, получился работоспособное приложение
+
+## HW12: Задание с ** - Настройка Travis CI
+
+- Настроил trytravis и репозиторий для него, разобрался с запуском
+- Добавил скрипт ./play-travis/hw12.sh содержащий в себе установку terraform, packer, tflint, ansible-lint и запуск соответствующих проверок
+- Отключил использование gce-bucket в роли backend чтобы не отображались сообщения о невозможности подключиться к bucket во время выполнения проверок
+- Настроил запуск кастомной проверки только в случае коммита в мастер или пулл-реквеста
+- Добавил badge из travis ci
