@@ -861,6 +861,9 @@ appserver | SUCCESS => {
 
 </details>
 
+<details>
+  <summary>HomeWork 12 - Ansible: работа с ролями и окружениями</summary>
+
 ## HomeWork 12 - Ansible: работа с ролями и окружениями
 
 - Созданы заготовки ролей app и db `ansible-galaxy init app`
@@ -903,16 +906,145 @@ appserver | SUCCESS => {
 - Файлы credentials.yml зашифрованы
 - Вызов плейбука users.yml добавлен в site.yml и применен для stage-окружения
 
-## HW12: Задание со * - Работа с динамическим инветори
+### HW12: Задание со * - Работа с динамическим инветори
 
 - Добавил gce.py в директорию для каждого окружения
 - Добавить в group_vars файлы tag_reddit-app и tag_reddit-db со значениями переменных для ролей.
 - Запустил ansible-playbook -i environments/stage/gce.py playbooks/site.yml на чистой инфраструктуре, получился работоспособное приложение
 
-## HW12: Задание с ** - Настройка Travis CI
+### HW12: Задание с ** - Настройка Travis CI
 
 - Настроил trytravis и репозиторий для него, разобрался с запуском
 - Добавил скрипт ./play-travis/hw12.sh содержащий в себе установку terraform, packer, tflint, ansible-lint и запуск соответствующих проверок
 - Отключил использование gce-bucket в роли backend чтобы не отображались сообщения о невозможности подключиться к bucket во время выполнения проверок
 - Настроил запуск кастомной проверки только в случае коммита в мастер или пулл-реквеста
 - Добавил badge из travis ci
+
+</details>
+
+## HomeWork 13 - Разработка и тестирование Ansible ролей и плейбуков
+
+- Установлен VirtualBox и Vagrant
+- В .gitignore добавлены исключения для Vagrant и molecule
+- В ./ansible добавлен vagrantfile с описанием vm appserver и dbserver
+- Подняты машины appserver и dbserver
+
+```bash
+vagrant status
+
+Current machine states:
+
+dbserver                  running (virtualbox)
+appserver                 running (virtualbox)
+```
+
+- Машины доступны по ssh и отвечают на ping
+
+### Доработка ролей
+
+- В Vagrantfile добавлен ansible-провижинер для vm dbserver
+- Добавлен новый плейбук ./ansible/playbooks/base.yml, он импортирован в ./ansible/playbooks/site.yml
+- В base.yml описана проверка наличия и, в случае отсуствия, установка python для обеспечения работы ansible
+- В роль db добавлен файл тасков ./ansible/roles/db/tasks/install_mongo.yml описывающий установку MongoDB
+- Шаг настройки mongoDB вынесен из main.yml в отдельный файл ./ansible/roles/db/tasks/config_mongo.yml
+- В ./ansible/roles/db/tasks/main.yml добавлены запуски тасков в нужном нам порядке
+- Выполнен провижининг dbserver посредством `vagrant provision dbserver`
+- Проверена доступность порта 27017 c appserver
+- Добавлен файл ./ansible/roles/app/tasks/ruby.yml описывающий установку ruby, rubygems и зависимостей
+- Так же добавлен файл ./ansible/roles/app/tasks/puma.yml описывающий настройку puma-server
+- В ./ansible/roles/app/tasks/main.yml добавлены include в нужном порядке
+- В Vagrantfile добавлен провижининг appserver сердствами ansible
+- Выполнен провижининг appserver `vagrant provision appserver`
+- В ./ansible/roles/app/defaults/main.yml добавлена переменная deploy_user
+- В puma.yml копирование unit-файла через copy заменено на использование template
+- Unit-файл puma.service преобразован в jinja-шаблон и параметризован
+- Параметризован плейбук ./ansible/roles/app/tasks/puma.yml
+- Параметризован плейбук ./ansible/playbooks/deploy.yml
+- В Vagrantfile добавлено определение значения перемменной deploy_user
+- Проверил настройку appserver через `vagrant provision appserver`
+- Исправил две проблемы: поменял пользователя deploy_user на vagrant, убрал запуск handler restart puma после добавления unit-файла
+- Убедился в том, что сервис поднялся и доступен на 10.10.10.20:9292
+- Проверил конфигурацию через vagrant destroy -f / vagrant up
+
+### HW13: Задание со *
+
+- Для того чтобы nginx проксировал запросы к приложению в vagrantfile добавлены настройки аналогично тому, как это было настроено в ./ansible/group_vars/app
+
+<details>
+  <summary>nginx options</summary>
+
+```ruby
+ansible.extra_vars = {"deploy_user" => "vagrant",
+      "nginx_sites" => {
+        "default" => [
+          "listen 80 default_server",
+          "server_name reddit",
+          "location / { proxy_pass http://127.0.0.1:9292; }"
+        ]
+      }
+```
+
+</details>
+
+### Тестирование роли
+
+- Настроил virtualenv
+- Установил ansible, molecule, testinfra, python-vagrant
+- Создал заготовку тестов роли db: "molecule init scenario --scenario-name default -r db -d vagrant"
+- Добавил тесты в ./ansible/roles/db/molecule/default/tests/test_default.py
+- Добавил описание тестовой машины в ./ansible/roles/db/molecule/default/molecule.yml
+- Создал VM через "molecule create"
+- Убедился в возможности подключитьсяк инстансу через molecule login -h instance
+- Добавил запуск от root (become: true) и переменную mongo_bind_ip в ./ansible/roles/db/molecule/default/playbook.yml
+- Применил конфигурацию инстанса через molecule converge
+- Запустил тесты через molecule verify и убедился что они работают
+
+### HW13: Самостоятельное задание
+
+- Добавил в ./ansible/roles/db/molecule/default/tests/test_default.py
+
+<details>
+  <summary>molecule mongo port</summary>
+
+```python
+def test_mongo_listening(host):
+    assert host.socket("tcp://0.0.0.0:27017").is_listening
+```
+
+</details>
+
+- Перевел плейбуки packer_app.yml и packer_db.yml на использование ролей app и db соответственно, указал в шаблонах пакера откуда брать роли и с каким тэгом их запускать
+
+<details>
+  <summary>packer app provisioner</summary>
+
+```json
+"provisioners": [
+    {
+    "type": "ansible",
+    "playbook_file": "ansible/playbooks/packer_app.yml",
+    "extra_arguments": ["--tags","ruby"],
+    "ansible_env_vars": ["ANSIBLE_ROLES_PATH=ansible/roles"]
+    }
+]
+```
+
+</details>
+
+<details>
+  <summary>packer db provisioner</summary>
+
+```json
+"provisioners": [
+    {
+    "type": "ansible",
+    "playbook_file": "ansible/playbooks/packer_db.yml",
+    "extra_arguments": ["--tags","install"],
+    "ansible_env_vars": ["ANSIBLE_ROLES_PATH=ansible/roles"]
+    }
+]
+```
+
+</details>
+
+- Проверил сборку шаблонов packer'ом
